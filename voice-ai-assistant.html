@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ben — Simple Voice/Text AI Assistant</title>
+<style>
+  :root{
+    --bg:#0f1410;
+    --panel:#161d18;
+    --accent:#5fd97a;
+    --accent-dim:#2c5c3a;
+    --text:#eaf5ec;
+    --sub:#93a89b;
+    --user-bubble:#22301f;
+    --bot-bubble:#1b2a20;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:radial-gradient(circle at 20% -10%, #1c2d1f, var(--bg) 55%);
+    font-family:'Segoe UI', system-ui, sans-serif;
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .app{
+    width:100%;
+    max-width:560px;
+    background:var(--panel);
+    border:1px solid #24312a;
+    border-radius:18px;
+    overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.45);
+  }
+  header{
+    padding:20px 24px;
+    border-bottom:1px solid #24312a;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .orb{
+    width:38px;height:38px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--accent), var(--accent-dim) 70%);
+    flex-shrink:0;
+    transition:box-shadow .2s ease;
+  }
+  .orb.listening{
+    box-shadow:0 0 0 6px rgba(95,217,122,0.15), 0 0 0 12px rgba(95,217,122,0.08);
+    animation:pulse 1.2s infinite ease-in-out;
+  }
+  @keyframes pulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.12);}
+  }
+  header h1{font-size:17px;margin:0;letter-spacing:.3px;}
+  header p{margin:2px 0 0;font-size:12px;color:var(--sub);}
+
+  #log{
+    height:380px;
+    overflow-y:auto;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .msg{
+    max-width:78%;
+    padding:10px 14px;
+    border-radius:14px;
+    font-size:14px;
+    line-height:1.45;
+  }
+  .msg.user{
+    align-self:flex-end;
+    background:var(--user-bubble);
+    border-bottom-right-radius:4px;
+  }
+  .msg.bot{
+    align-self:flex-start;
+    background:var(--bot-bubble);
+    border-bottom-left-radius:4px;
+    color:var(--text);
+  }
+  .msg .label{
+    display:block;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--sub);
+    margin-bottom:3px;
+  }
+
+  form{
+    display:flex;
+    gap:8px;
+    padding:16px;
+    border-top:1px solid #24312a;
+    background:#121812;
+  }
+  input[type=text]{
+    flex:1;
+    background:#0f1410;
+    border:1px solid #2a382f;
+    border-radius:10px;
+    padding:11px 13px;
+    color:var(--text);
+    font-size:14px;
+    outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent);}
+  button{
+    border:none;
+    border-radius:10px;
+    padding:0 16px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    transition:transform .1s ease, opacity .15s ease;
+  }
+  button:active{transform:scale(0.96);}
+  #sendBtn{background:var(--accent);color:#0b1a0f;}
+  #micBtn{background:#1e2a20;color:var(--accent);border:1px solid var(--accent-dim);width:46px;}
+  #micBtn.active{background:var(--accent);color:#0b1a0f;}
+  #status{
+    padding:0 16px 14px;
+    font-size:11px;
+    color:var(--sub);
+    text-align:center;
+  }
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:#2a382f;border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="orb" id="orb"></div>
+    <div>
+      <h1>Ben — Voice/Text Assistant</h1>
+      <p>Type or speak. Ben replies out loud and on screen.</p>
+    </div>
+  </header>
+
+  <div id="log"></div>
+
+  <form id="form">
+    <button type="button" id="micBtn" title="Speak">Mic</button>
+    <input type="text" id="input" placeholder="Ask Ben something..." autocomplete="off">
+    <button type="submit" id="sendBtn">Send</button>
+  </form>
+  <div id="status">Tip: try "hello", "what's the time", "who are you", or "help"</div>
+</div>
+
+<script>
+// ---------- Simple rule-based "AI" brain ----------
+// This is intentionally simple and readable for an assignment:
+// it matches keywords in the user's message and picks a response.
+function getReply(text) {
+  var t = text.toLowerCase().trim();
+
+  var rules = [
+    { keys: ["hello", "hi", "hey"], reply: function(){ return "Hello! I'm Ben, a simple demo assistant. How can I help?"; } },
+    { keys: ["how are you"], reply: function(){ return "I'm just code, but I'm running smoothly, thanks for asking!"; } },
+    { keys: ["your name", "who are you"], reply: function(){ return "I'm Ben, a small sample AI assistant built for a class assignment."; } },
+    { keys: ["time"], reply: function(){ return "The current time is " + new Date().toLocaleTimeString() + "."; } },
+    { keys: ["date", "today"], reply: function(){ return "Today's date is " + new Date().toLocaleDateString() + "."; } },
+    { keys: ["joke"], reply: function(){ return "Why did the developer go broke? Because they used up all their cache."; } },
+    { keys: ["help", "what can you do"], reply: function(){ return "You can ask me about the time, the date, tell me to joke, say hi, or just chat. I use simple keyword matching."; } },
+    { keys: ["bye", "goodbye"], reply: function(){ return "Goodbye! Feel free to come back and chat anytime."; } },
+    { keys: ["thank"], reply: function(){ return "You're very welcome!"; } },
+    { keys: ["weather"], reply: function(){ return "I don't have real-time weather data, but you can check your local weather app or website for the latest updates."; } },
+    { keys: ["who made you" , "who created you"], reply: function(){ return "I was created by a student for a class assignment, as a simple demonstration of a voice/text AI assistant."; } },
+    { keys:["hello","hi","hey"], reply:function(){ return "Hello! I'm Ben. How can I help you today?"; } },
+{ keys:["good morning"], reply:function(){ return "Good morning! I hope you have a wonderful day."; } },
+{ keys:["good afternoon"], reply:function(){ return "Good afternoon! How can I assist you?"; } },
+{ keys:["good evening"], reply:function(){ return "Good evening! What can I do for you?"; } },
+{ keys:["how are you"], reply:function(){ return "I'm doing great! Thanks for asking."; } },
+{ keys:["your name","who are you"], reply:function(){ return "I'm Ben, your AI assistant."; } },
+{ keys:["who made you","who created you"], reply:function(){ return "I was created by a student as an AI assistant project."; } },
+{ keys:["thank","thanks"], reply:function(){ return "You're welcome!"; } },
+{ keys:["bye","goodbye"], reply:function(){ return "Goodbye! Have a wonderful day."; } },
+{ keys:["help"], reply:function(){ return "I'm here to answer questions and have conversations with you."; } },
+{ keys:["time"], reply:function(){ return "The current time is " + new Date().toLocaleTimeString(); } },
+{ keys:["date","today"], reply:function(){ return "Today's date is " + new Date().toLocaleDateString(); } },
+{ keys:["day"], reply:function(){ return "Today is " + new Date().toLocaleDateString('en-US',{weekday:'long'}); } },
+{ keys:["weather"], reply:function(){ return "I cannot check live weather, but you can use a weather app for current conditions."; } },
+{ keys:["joke"], reply:function(){ return "Why don't programmers like nature? It has too many bugs."; } },
+{ keys:["age","how old are you"], reply:function(){ return "I'm software, so I don't have an age."; } },
+{ keys:["love"], reply:function(){ return "Love is one of the most wonderful human emotions."; } },
+{ keys:["music"], reply:function(){ return "Music is a great way to relax and improve your mood."; } },
+{ keys:["movie"], reply:function(){ return "I enjoy discussing movies. Which one is your favorite?"; } },
+{ keys:["football","soccer"], reply:function(){ return "Football is one of the world's most popular sports."; } },
+{ keys:["basketball"], reply:function(){ return "Basketball is an exciting sport enjoyed worldwide."; } },
+{ keys:["computer"], reply:function(){ return "A computer is an electronic device that processes data."; } },
+{ keys:["laptop"], reply:function(){ return "A laptop is a portable personal computer."; } },
+{ keys:["internet"], reply:function(){ return "The Internet connects millions of computers across the world."; } },
+{ keys:["wifi"], reply:function(){ return "Wi-Fi allows devices to connect wirelessly to the Internet."; } },
+{ keys:["html"], reply:function(){ return "HTML is the standard language for creating web pages."; } },
+{ keys:["css"], reply:function(){ return "CSS is used to style web pages."; } },
+{ keys:["javascript"], reply:function(){ return "JavaScript makes websites interactive."; } },
+{ keys:["php"], reply:function(){ return "PHP is a server-side scripting language used for web development."; } },
+{ keys:["mysql"], reply:function(){ return "MySQL is a popular relational database management system."; } },
+{ keys:["database"], reply:function(){ return "A database stores and organizes data efficiently."; } },
+{ keys:["programming","coding"], reply:function(){ return "Programming is the process of writing instructions for computers."; } },
+{ keys:["artificial intelligence","ai"], reply:function(){ return "Artificial Intelligence enables machines to perform tasks that normally require human intelligence."; } },
+{ keys:["machine learning"], reply:function(){ return "Machine learning is a branch of AI that learns from data."; } },
+{ keys:["robot"], reply:function(){ return "Robots can perform tasks automatically using software and hardware."; } },
+{ keys:["science"], reply:function(){ return "Science helps us understand the natural world."; } },
+{ keys:["math","mathematics"], reply:function(){ return "Mathematics is the language of numbers and logic."; } },
+{ keys:["biology"], reply:function(){ return "Biology is the study of living organisms."; } },
+{ keys:["chemistry"], reply:function(){ return "Chemistry studies matter and its interactions."; } },
+{ keys:["physics"], reply:function(){ return "Physics studies matter, energy, and forces."; } },
+{ keys:["kenya"], reply:function(){ return "Kenya is a country in East Africa famous for wildlife, athletics, and beautiful landscapes."; } },
+{ keys:["nairobi"], reply:function(){ return "Nairobi is the capital city of Kenya."; } },
+{ keys:["mombasa"], reply:function(){ return "Mombasa is Kenya's largest coastal city."; } },
+{ keys:["uganda"], reply:function(){ return "Uganda is known as the Pearl of Africa."; } },
+{ keys:["tanzania"], reply:function(){ return "Tanzania is home to Mount Kilimanjaro and Serengeti National Park."; } },
+{ keys:["africa"], reply:function(){ return "Africa is the world's second-largest continent."; } },
+{ keys:["farmer","farming"], reply:function(){ return "Farming is essential for producing food and supporting economies."; } },
+{ keys:["crop","crops"], reply:function(){ return "Healthy crops require good soil, water, and proper disease management."; } },
+{ keys:["disease"], reply:function(){ return "Plant diseases can reduce crop yields if not managed properly."; } },
+{ keys:["fertilizer"], reply:function(){ return "Fertilizers provide nutrients that help plants grow."; } },
+{ keys:["soil"], reply:function(){ return "Healthy soil is the foundation of successful farming."; } },
+{ keys:["water"], reply:function(){ return "Water is essential for all living organisms."; } },
+{ keys:["sun"], reply:function(){ return "The Sun is the star at the center of our solar system."; } },
+{ keys:["moon"], reply:function(){ return "The Moon is Earth's natural satellite."; } },
+{ keys:["earth"], reply:function(){ return "Earth is the third planet from the Sun."; } },
+{ keys:["space"], reply:function(){ return "Space is vast and contains billions of galaxies."; } },
+{ keys:["food"], reply:function(){ return "A balanced diet is important for good health."; } },
+{ keys:["doctor"], reply:function(){ return "Doctors diagnose and treat illnesses."; } },
+{ keys:["hospital"], reply:function(){ return "Hospitals provide medical care and treatment."; } },
+{ keys:["exercise"], reply:function(){ return "Regular exercise helps keep your body healthy."; } },
+{ keys:["sleep"], reply:function(){ return "Adults should aim for 7 to 9 hours of sleep each night."; } },
+{ keys:["book"], reply:function(){ return "Reading books is an excellent way to gain knowledge."; } },
+{ keys:["school"], reply:function(){ return "Education helps build knowledge and skills."; } },
+{ keys:["teacher"], reply:function(){ return "Teachers help students learn and grow."; } },
+{ keys:["student"], reply:function(){ return "Students learn new knowledge and develop important skills."; } },
+{ keys:["exam"], reply:function(){ return "Prepare well, revise regularly, and stay confident for your exams."; } },
+{ keys:["assignment"], reply:function(){ return "Start early and follow the instructions carefully for your assignment."; } },
+{ keys:["motivate","motivation"], reply:function(){ return "Success comes from consistency, not perfection."; } },
+{ keys:["quote"], reply:function(){ return "The best way to predict the future is to create it."; } },
+{ keys:["cat"], reply:function(){ return "Cats are intelligent and playful companions."; } },
+{ keys:["dog"], reply:function(){ return "Dogs are known for their loyalty and companionship."; } }
+
+  ];
+
+
+  for (var i = 0; i < rules.length; i++) {
+    var rule = rules[i];
+    for (var j = 0; j < rule.keys.length; j++) {
+      if (t.indexOf(rule.keys[j]) !== -1) {
+        return rule.reply();
+      }
+    }
+  }
+
+  var fallbacks = [
+    "That's interesting, tell me more!",
+    "I'm a simple assistant, so I might not fully understand that, but I'm listening.",
+    "Could you rephrase that? I work best with simple questions.",
+    "Noted! Try asking me for the time, a joke, or just say hello."
+  ];
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+
+// ---------- UI wiring ----------
+var log = document.getElementById('log');
+var form = document.getElementById('form');
+var input = document.getElementById('input');
+var micBtn = document.getElementById('micBtn');
+var orb = document.getElementById('orb');
+var statusEl = document.getElementById('status');
+
+function addMessage(text, who) {
+  var div = document.createElement('div');
+  div.className = 'msg ' + who;
+  var label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = who === 'user' ? 'You' : 'Ben';
+  div.appendChild(label);
+  div.appendChild(document.createTextNode(text));
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  var utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1;
+  utter.pitch = 1;
+  window.speechSynthesis.speak(utter);
+}
+
+function handleUserText(text) {
+  if (!text || !text.trim()) return;
+  addMessage(text, 'user');
+  var reply = getReply(text);
+  setTimeout(function(){
+    addMessage(reply, 'bot');
+    speak(reply);
+  }, 300);
+}
+
+form.addEventListener('submit', function(e){
+  e.preventDefault();
+  var text = input.value;
+  input.value = '';
+  handleUserText(text);
+});
+
+// ---------- Voice input (speech-to-text) ----------
+var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+var recognizing = false;
+var recognizer = null;
+
+if (SpeechRecognition) {
+  recognizer = new SpeechRecognition();
+  recognizer.lang = 'en-US';
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+
+  recognizer.onstart = function(){
+    recognizing = true;
+    micBtn.classList.add('active');
+    orb.classList.add('listening');
+    statusEl.textContent = 'Listening... speak now';
+  };
+
+  recognizer.onend = function(){
+    recognizing = false;
+    micBtn.classList.remove('active');
+    orb.classList.remove('listening');
+    statusEl.textContent = 'Tip: try "hello", "what\'s the time", "who are you", or "help"';
+  };
+
+  recognizer.onerror = function(e){
+    statusEl.textContent = 'Mic error: ' + e.error + ' (try typing instead)';
+  };
+
+  recognizer.onresult = function(event){
+    var transcript = event.results[0][0].transcript;
+    handleUserText(transcript);
+  };
+
+  micBtn.addEventListener('click', function(){
+    if (recognizing) {
+      recognizer.stop();
+    } else {
+      recognizer.start();
+    }
+  });
+} else {
+  micBtn.disabled = true;
+  micBtn.title = 'Voice input not supported in this browser';
+  statusEl.textContent = "Voice input isn't supported here, try Chrome, or just type below.";
+}
+
+// Greet on load
+addMessage("Hi! I'm Ben. Type a message or tap the mic to talk to me.", 'bot');
+</script>
+
+</body>
+</html>
